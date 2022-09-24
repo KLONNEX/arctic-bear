@@ -130,6 +130,11 @@ See [reparameterization.ipynb](tools/reparameterization.ipynb)
 
 ## Inference
 
+For split inference on image:
+```shell
+python detect.py --weights yolov7.pt --conf 0.25 --img-size 640 --source inference/images/horses.jpg --split 4 4 --save-txt
+```
+
 On video:
 ``` shell
 python detect.py --weights yolov7.pt --conf 0.25 --img-size 640 --source yourvideo.mp4

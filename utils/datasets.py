@@ -126,7 +126,7 @@ class _RepeatSampler(object):
 
 
 class LoadImages:  # for inference
-    def __init__(self, path, img_size=640, stride=32):
+    def __init__(self, path, img_size=640, stride=32, split=()):
         p = str(Path(path).absolute())  # os-agnostic absolute path
         if '*' in p:
             files = sorted(glob.glob(p, recursive=True))  # glob
@@ -140,6 +140,8 @@ class LoadImages:  # for inference
         images = [x for x in files if x.split('.')[-1].lower() in img_formats]
         videos = [x for x in files if x.split('.')[-1].lower() in vid_formats]
         ni, nv = len(images), len(videos)
+        
+        self.split = split
 
         self.img_size = img_size
         self.stride = stride
@@ -157,6 +159,29 @@ class LoadImages:  # for inference
     def __iter__(self):
         self.count = 0
         return self
+    
+    def split_image(self, image, h_splits, w_splits, offset=0):
+        h,w,c = image.shape
+        w_split_size = w // w_splits
+        h_split_size = h // h_splits
+
+        w_split = list(range(0, w, w_split_size))[:w_splits]
+        h_split = list(range(0, h, h_split_size))[:h_splits]
+
+        images = []
+        coords = []
+        for w_i, start_w in enumerate(w_split):
+            w_end_point = None if w_i + 1 == w_splits else start_w + w_split_size + offset
+            slice_w = slice(start_w if start_w == 0 else start_w - offset, w_end_point)
+
+            for h_i, start_h in enumerate(h_split):
+                h_end_point = None if h_i + 1 == h_splits else start_h + h_split_size + offset
+                slice_h = slice(start_h if start_h == 0 else start_h - offset, h_end_point)
+
+                images.append(image[slice_h, slice_w, :])
+                coords.append((h_i, w_i))
+                
+        return images, coords, (h_split_size, w_split_size)
 
     def __next__(self):
         if self.count == self.nf:
@@ -186,7 +211,21 @@ class LoadImages:  # for inference
             img0 = cv2.imread(path)  # BGR
             assert img0 is not None, 'Image Not Found ' + path
             #print(f'image {self.count}/{self.nf} {path}: ', end='')
-
+        
+        images = ()
+        if self.split:
+            images, coords, tiles = self.split_image(img0, self.split[0], self.split[1])
+            print('len images: ', len(images))
+            
+        if images:
+            resized_images = []
+            for img in images:
+                res_img = letterbox(img, self.img_size, stride=self.stride)[0]
+                res_img = res_img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+                res_img = np.ascontiguousarray(res_img)
+                resized_images.append(res_img)
+            return path, resized_images, images, self.cap, coords, img0, tiles
+                
         # Padded resize
         img = letterbox(img0, self.img_size, stride=self.stride)[0]
 
