@@ -30,10 +30,12 @@ app.config.from_mapping(
     )
 
 
-class Predict:
-    def __init__(self, weights, imgsz=640, device='0', conf_thres=0.25, iou_thres=0.45):
+class Predictor:
+    def __init__(self, weights, imgsz=640, device='0', conf_thres=0.25, iou_thres=0.45, save_dir='predictions/'):
         self.conf_thres = conf_thres
         self.iou_thres = iou_thres
+        self.save_dir = Path(save_dir)
+        self.save_dir.mkdir(parents=True, exist_ok=True)
 
         # Initialize
         set_logging()
@@ -49,7 +51,7 @@ class Predict:
         if half:
             self.model.half()  # to FP16
 
-    def predict(self, path_to_image_or_dir, save_txt=True, save_img=False, ):
+    def predict(self, path_to_image_or_dir, save_img=True):
         # Directories
         # Get names and colors
         self.names = self.model.module.names if hasattr(self.model, 'module') else self.model.names
@@ -65,7 +67,10 @@ class Predict:
 
         t0 = time.time()
         half = self.device.type != 'cpu'  # half precision only supported on CUDA
+        results = []
+
         for path, img, im0s, vid_cap in dataset:
+            print(f'CHECK IMAGE: {path}')
             img = torch.from_numpy(img).to(self.device)
             img = img.half() if half else img.float()  # uint8 to fp16/32
             img /= 255.0  # 0 - 255 to 0.0 - 1.0
@@ -76,15 +81,13 @@ class Predict:
 
             # Apply NMS
             pred = non_max_suppression(pred, self.conf_thres, self.iou_thres, classes=None, agnostic=None)
+            p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
 
             # Process detections
             for i, det in enumerate(pred):  # detections per image
-                p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
-
                 p = Path(p)  # to Path
                 save_path = str(self.save_dir / p.name)  # img.jpg
-                txt_path = str(self.save_dir / 'labels' / p.stem) + (
-                    '' if dataset.mode == 'image' else f'_{frame}')  # img.txt
+
                 gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
                 if len(det):
                     # Rescale boxes from img_size to im0 size
@@ -96,13 +99,23 @@ class Predict:
                         s += f"{n} {self.names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                     # Write results
-                    results = []
+
                     for *xyxy, conf, cls in reversed(det):
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4))).view(-1).tolist()
-                        results.append(xywh[:2])
+                        x, y = xywh[:2]
+                        x, y = int(x), int(y)
+
+                        results.append([p.as_posix(), x, y])
+                        if save_img:
+                            plot_one_box(xyxy, im0, color=(0, 0, 255), line_thickness=1)
+
+            if save_img:
+                cv2.imwrite(save_path, im0)
+
+        return results
 
 
-predictor = Predict(weights='yolo_weights/best.pt')
+predictor = Predictor(weights='yolo_weights/best.pt')
 
 state = {
     'filename': '',
