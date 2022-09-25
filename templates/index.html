@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+    <script src="{{ url_for('static', filename='js/custom_scripts.js') }}"></script>
+    <title>Поиск медведей</title>
+    <script>
+        window.addEventListener("load", function () {
+            function sendData() {
+                var XHR = new XMLHttpRequest();
+
+                // Bind the FormData object and the form element
+                var FD = new FormData(form);
+
+                // Define what happens in case of error
+                XHR.addEventListener("error", function(event) {
+                  alert('Oups! Something goes wrong.');
+                });
+                XHR.onreadystatechange = function() {
+                    if (XHR.readyState === 4) {
+                        var req = XHR.response;
+                        // alert(req);
+                        req = JSON.parse(req);
+                        if (req.status === 200) {
+                            chng2dnld();
+                        }
+                        else {
+                            chng2hide();
+                            alert(req["message"]);
+                        }
+                    }
+                }
+
+                // Set up our request
+                XHR.open("POST", document.URL);
+
+                // The data sent is what the user provided in the form
+                XHR.send(FD);
+
+            }
+
+            // Access the form element...
+            var form = document.getElementById("inputForm");
+
+                // ...and take over its submit event.
+                form.addEventListener("submit", function (event) {
+                event.preventDefault();
+
+                sendData();
+            });
+        });
+
+    </script>
+</head>
+<body>
+
+<section class="border p-4 d-flex justify-content-left mb-4 row">
+    <div class="row">
+        <div class="col-6 col-md-6">
+            <form id="inputForm">
+                <div style="width: 32rem;">
+                    <label class="form-label" for="imageFile"> Входная папка </label>
+                    <input type="file" class="form-control" id="imageFile" name="imageFile" webkitdirectory directory multiple>
+<!--                    data-buttonText="Выберите папку"-->
+                </div>
+                <input type="submit" value="Отправить данные" class="btn btn-primary" name="btnInput" onclick="chng2load();">
+            </form>
+        </div>
+
+        <div class="col-12 col-md-6">
+            <div class="row">
+                <form method="post" enctype=multipart/form-data>
+                    <input type=submit id="btnDownload" name="btnDownload" value=Save class="btn btn-primary" disabled style="visibility:hidden">
+                    <div id="txtDownload"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+
+</body>
+</html>
