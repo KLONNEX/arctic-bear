@@ -1,14 +1,16 @@
-python='/home/goncharenko/work/ENOT_folder/.yolo_marketplace/bin/python3.9'
-devices='0'
+python='/home/ivanov/anaconda3/bin/python'
+devices='3'
 
-CUDA_VISIBLE_DEVICES=$devices $python train.py \
+CUDA_VISIBLE_DEVICES=3 $python train.py \
     --workers 8 \
-    --device 0 \
-    --batch-size 3 \
+    --device 3 \
+    --batch-size 12 \
     --data data/polar_bear.yaml \
-    --img 640 640 \
+    --img 800 800 \
     --cfg cfg/training/yolov7-tiny.yaml \
-    --weights yolov7-tiny.pt \
+    --weights runs/train/yolov7-tiny7/weights/epoch_024.pt \
     --name yolov7-tiny \
-    --hyp data/hyp.scratch.p5.yaml
+    --hyp data/hyp.scratch.p5.yaml \
+    --epochs 60 \
+    --name focal_2.0_yes_mosaic
 

@@ -13,6 +13,7 @@ from utils.general import check_img_size, check_requirements, check_imshow, non_
     scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized, TracedModel
+import pandas as pd
 
 
 def detect(save_img=False):
@@ -63,6 +64,7 @@ def detect(save_img=False):
     old_img_b = 1
 
     t0 = time.time()
+    data = {'name': [], 'x': [], 'y': []}
     for path, imgs, im0ss, vid_cap, coords, im0_0, tiles in dataset:
         per_image_preds = []
         for img, im0s in zip(imgs, im0ss):
@@ -118,6 +120,11 @@ def detect(save_img=False):
                     # Write results
                     for *xyxy, conf, cls in reversed(det): 
                         if save_txt:  # Write to file
+                            x_center = int((xyxy[0]+xyxy[2]) / 2)
+                            y_center = int((xyxy[1]+xyxy[3]) / 2)
+                            data['x'].append(x_center)
+                            data['y'].append(y_center)
+                            data['name'].append(p.name)
                             xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                             line = (cls, *xywh, conf) if opt.save_conf else (cls, *xywh)  # label format
                             with open(txt_path + '.txt', 'a') as f:
@@ -125,11 +132,10 @@ def detect(save_img=False):
 
                         if save_img or view_img:  # Add bbox to image
                             label = f'{names[int(cls)]} {conf:.2f}'
-                            plot_one_box(xyxy, im0_0, label=label, color=colors[int(cls)], line_thickness=1)
+                            plot_one_box(xyxy, im0_0, label=label, color=colors[int(cls)], line_thickness=1, xc=x_center, yc=y_center)
 
         # Print time (inference + NMS)
         print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')
-
         # Stream results
         if view_img:
             cv2.imshow(str(p), im0_0)
@@ -154,7 +160,9 @@ def detect(save_img=False):
                         save_path += '.mp4'
                     vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                 vid_writer.write(im0_0)
-
+    if save_txt:
+        data = pd.DataFrame(data)
+        data.to_csv(str(save_dir / 'EternalStardustV2.csv'), index=False)
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         #print(f"Results saved to {save_dir}{s}")

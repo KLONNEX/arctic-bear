@@ -54,7 +54,7 @@ def butter_lowpass_filtfilt(data, cutoff=1500, fs=50000, order=5):
     return filtfilt(b, a, data)  # forward-backward filter
 
 
-def plot_one_box(x, img, color=None, label=None, line_thickness=3):
+def plot_one_box(x, img, color=None, label=None, line_thickness=3, xc=None, yc=None):
     # Plots one bounding box on image img
     tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
     color = color or [random.randint(0, 255) for _ in range(3)]
@@ -66,9 +66,11 @@ def plot_one_box(x, img, color=None, label=None, line_thickness=3):
         c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
         cv2.rectangle(img, c1, c2, color, -1, cv2.LINE_AA)  # filled
         cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
+        if xc is not None and yc is not None:
+            cv2.circle(img, [xc, yc], 10, (255, 0, 0), 10)
 
 
-def plot_one_box_PIL(box, img, color=None, label=None, line_thickness=None):
+def plot_one_box_PIL(box, img, color=None, label=None, line_thickness=None, xc=None, yc=None):
     img = Image.fromarray(img)
     draw = ImageDraw.Draw(img)
     line_thickness = line_thickness or max(int(min(img.size) / 200), 2)
@@ -79,6 +81,8 @@ def plot_one_box_PIL(box, img, color=None, label=None, line_thickness=None):
         txt_width, txt_height = font.getsize(label)
         draw.rectangle([box[0], box[1] - txt_height + 4, box[0] + txt_width, box[1]], fill=tuple(color))
         draw.text((box[0], box[1] - txt_height + 1), label, fill=(255, 255, 255), font=font)
+        if xc is not None and yc is not None:
+            draw.ellipse((xc-10, yc-10, xc+10, yc+10), fill=(255,0,0,0))
     return np.asarray(img)
 
 

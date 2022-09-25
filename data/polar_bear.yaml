@@ -1,8 +1,12 @@
 # COCO 2017 dataset http://cocodataset.org
 
 # train and val data as 1) directory: path/images/, 2) file: path/images.txt, or 3) list: [path1/images/, path2/images/]
-train: ../find_bear/arctic_with_bears/images/  # 118287 images
-val: ../find_bear/arctic_with_bears/images/  # 5000 images
+train: 
+  - /home/ivanov/ML_NSU_2022_PD/arctic-bear/data/aug_train/train/images/
+  - /home/ivanov/ML_NSU_2022_PD/arctic-bear/data/bears/aug_bears/train/images/
+val: 
+  - /home/ivanov/ML_NSU_2022_PD/arctic-bear/data/aug_train/validation/images/
+  - /home/ivanov/ML_NSU_2022_PD/arctic-bear/data/bears/aug_bears/validation/images/  # 5000 images
 
 # number of classes
 nc: 1
