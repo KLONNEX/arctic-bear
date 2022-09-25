@@ -1,4 +1,4 @@
-import json
+import csv
 from pathlib import Path
 
 import cv2
@@ -14,7 +14,7 @@ app.config.from_mapping(
 
 class Predict:
     def predict(self, image):
-        return image.shape
+        return image.shape[:2]
 
 predictor = Predict()
 
@@ -22,6 +22,7 @@ state = {
     'filename': '',
 }
 
+header = ['image_name', 'x_center', 'y_center']
 
 def convert_image(bin_file):
     n_array = np.frombuffer(bin_file, dtype="uint8")
@@ -43,7 +44,6 @@ def process_inp_file(files, name='imageFile', ext='.png'):
 @app.route("/", methods=['GET', 'POST'])
 def root():
     tag_image = 'imageFile'
-    image = None
     print(flask.request.method)
 
     if flask.request.method == 'POST':
@@ -53,7 +53,7 @@ def root():
             print('Download', fname)
             if fname != '':
                 res = send_file(
-                        'test.txt',
+                        fname,
                         as_attachment=True,
                         mimetype='application/zip',
                     )
@@ -63,7 +63,7 @@ def root():
         if tag_image in flask.request.files.keys():
             files = flask.request.files.getlist(tag_image)
 
-            predicts = {}
+            predicts = []
 
             for file in files:
                 data_image, data_info = process_inp_file(file)
@@ -72,10 +72,16 @@ def root():
 
                     out = predictor.predict(image)
 
-                    predicts[data_info] = out
+                    predicts.append([data_info, out[0], out[1]])
 
-            with Path('test.json').open('w') as file:
-                json.dump(predicts, file)
+            with Path('test.csv').open('w') as file:
+                writer = csv.writer(file)
+
+                writer.writerow(header)
+                for pred in predicts:
+                    writer.writerow(pred)
+
+            state['filename'] = 'test.csv'
 
             data = {'status': 200, 'message': 'OK'}
 
