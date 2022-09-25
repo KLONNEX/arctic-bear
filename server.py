@@ -11,7 +11,7 @@ import torch.backends.cudnn as cudnn
 from numpy import random
 
 from models.experimental import attempt_load
-from utils.datasets import LoadStreams, LoadImages
+from utils.datasets import LoadStreams, PrepareImages
 from utils.general import check_img_size, check_requirements, check_imshow, non_max_suppression, apply_classifier, \
     scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path
 from utils.plots import plot_one_box
@@ -47,11 +47,12 @@ class Predictor:
         stride = int(self.model.stride.max())  # model stride
         self.stride = stride
         self.imgsz  = check_img_size(imgsz, s=stride)  # check img_size
+        self.dataset = PrepareImages(img_size=self.imgsz, stride=self.stride)
 
         if half:
             self.model.half()  # to FP16
 
-    def predict(self, path_to_image_or_dir, save_img=True):
+    def predict(self, image, name, save_img=True):
         # Directories
         # Get names and colors
         self.names = self.model.module.names if hasattr(self.model, 'module') else self.model.names
@@ -59,7 +60,7 @@ class Predictor:
 
         # Set Dataloader
         vid_path, vid_writer = None, None
-        dataset = LoadImages(path_to_image_or_dir, img_size=self.imgsz, stride=self.stride)
+        prepared_image = self.dataset.prep_image(image=image, name=name)
 
         # Run inference
         if self.device.type != 'cpu':
@@ -69,48 +70,49 @@ class Predictor:
         half = self.device.type != 'cpu'  # half precision only supported on CUDA
         results = []
 
-        for path, img, im0s, vid_cap in dataset:
-            print(f'CHECK IMAGE: {path}')
-            img = torch.from_numpy(img).to(self.device)
-            img = img.half() if half else img.float()  # uint8 to fp16/32
-            img /= 255.0  # 0 - 255 to 0.0 - 1.0
-            if img.ndimension() == 3:
-                img = img.unsqueeze(0)
+        path, img, im0s, vid_cap = prepared_image
+        print(f'CHECK IMAGE: {path}')
+        img = torch.from_numpy(img).to(self.device)
+        img = img.half() if half else img.float()  # uint8 to fp16/32
+        img /= 255.0  # 0 - 255 to 0.0 - 1.0
+        if img.ndimension() == 3:
+            img = img.unsqueeze(0)
 
-            pred = self.model(img, augment=False)[0]
+        pred = self.model(img, augment=False)[0]
 
-            # Apply NMS
-            pred = non_max_suppression(pred, self.conf_thres, self.iou_thres, classes=None, agnostic=None)
-            p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
+        # Apply NMS
+        pred = non_max_suppression(pred, self.conf_thres, self.iou_thres, classes=None, agnostic=None)
 
-            # Process detections
-            for i, det in enumerate(pred):  # detections per image
-                p = Path(p)  # to Path
-                save_path = str(self.save_dir / p.name)  # img.jpg
+        p, s, im0, frame = path, '', im0s,  0
 
-                gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
-                if len(det):
-                    # Rescale boxes from img_size to im0 size
-                    det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
+        # Process detections
+        for i, det in enumerate(pred):  # detections per image
+            p = Path(p)  # to Path
+            save_path = str(self.save_dir / p.name)  # img.jpg
 
-                    # Print results
-                    for c in det[:, -1].unique():
-                        n = (det[:, -1] == c).sum()  # detections per class
-                        s += f"{n} {self.names[int(c)]}{'s' * (n > 1)}, "  # add to string
+            gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
+            if len(det):
+                # Rescale boxes from img_size to im0 size
+                det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
 
-                    # Write results
+                # Print results
+                for c in det[:, -1].unique():
+                    n = (det[:, -1] == c).sum()  # detections per class
+                    s += f"{n} {self.names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
-                    for *xyxy, conf, cls in reversed(det):
-                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4))).view(-1).tolist()
-                        x, y = xywh[:2]
-                        x, y = int(x), int(y)
+                # Write results
 
-                        results.append([p.as_posix(), x, y])
-                        if save_img:
-                            plot_one_box(xyxy, im0, color=(0, 0, 255), line_thickness=1)
+                for *xyxy, conf, cls in reversed(det):
+                    xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4))).view(-1).tolist()
+                    x, y = xywh[:2]
+                    x, y = int(x), int(y)
 
-            if save_img:
-                cv2.imwrite(save_path, im0)
+                    results.append([p.as_posix(), x, y])
+                    if save_img:
+                        im0 = plot_one_box(xyxy, im0, color=(0, 0, 255), line_thickness=1)
+
+        if save_img:
+            cv2.imwrite(save_path, im0)
 
         return results
 
@@ -121,7 +123,7 @@ state = {
     'filename': '',
 }
 
-header = ['image_name', 'x_center', 'y_center']
+header = ['name', 'x', 'y']
 
 
 def convert_image(bin_file):
@@ -170,18 +172,23 @@ def root():
                 if (data_info is not None) and (data_image is not None):
                     image = convert_image(data_image)
 
-                    out = predictor.predict(image)
+                    output = predictor.predict(image, data_info)
 
-                    predicts.append([data_info, out[0], out[1]])
+                    if len(output) == 0:
+                        predicts.append([data_info, None, None])
+                        continue
 
-            with Path('test.csv').open('w') as file:
+                    for out in output:
+                        predicts.append([data_info, out[1], out[2]])
+
+            with Path('predictions/test.csv').open('w') as file:
                 writer = csv.writer(file)
 
                 writer.writerow(header)
                 for pred in predicts:
                     writer.writerow(pred)
 
-            state['filename'] = 'test.csv'
+            state['filename'] = 'predictions/test.csv'
 
             data = {'status': 200, 'message': 'OK'}
 

@@ -125,6 +125,65 @@ class _RepeatSampler(object):
             yield from iter(self.sampler)
 
 
+class PrepareImages:  # for inference
+    def __init__(self, img_size=640, stride=32, split=()):
+        self.split = split
+
+        self.img_size = img_size
+        self.stride = stride
+        self.mode = 'image'
+        self.cap = None
+
+    def split_image(self, image, h_splits, w_splits, offset=0):
+        h, w, c = image.shape
+        w_split_size = w // w_splits
+        h_split_size = h // h_splits
+
+        w_split = list(range(0, w, w_split_size))[:w_splits]
+        h_split = list(range(0, h, h_split_size))[:h_splits]
+
+        images = []
+        coords = []
+        for w_i, start_w in enumerate(w_split):
+            w_end_point = None if w_i + 1 == w_splits else start_w + w_split_size + offset
+            slice_w = slice(start_w if start_w == 0 else start_w - offset, w_end_point)
+
+            for h_i, start_h in enumerate(h_split):
+                h_end_point = None if h_i + 1 == h_splits else start_h + h_split_size + offset
+                slice_h = slice(start_h if start_h == 0 else start_h - offset, h_end_point)
+
+                images.append(image[slice_h, slice_w, :])
+                coords.append((h_i, w_i))
+
+        return images, coords, (h_split_size, w_split_size)
+
+    def prep_image(self, image, name):
+        img0 = image
+
+        images = ()
+        if self.split:
+            images, coords, tiles = self.split_image(img0, self.split[0], self.split[1])
+            print('len images: ', len(images))
+
+        if images:
+            resized_images = []
+            for img in images:
+                res_img = letterbox(img, self.img_size, stride=self.stride)[0]
+                res_img = res_img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+                res_img = np.ascontiguousarray(res_img)
+                resized_images.append(res_img)
+            return resized_images, images, self.cap, coords, img0, tiles
+
+        # Padded resize
+        img = letterbox(img0, self.img_size, stride=self.stride)[0]
+
+        # Convert
+        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+        img = np.ascontiguousarray(img)
+
+        return name, img, img0, self.cap
+
+
 class LoadImages:  # for inference
     def __init__(self, path, img_size=640, stride=32, split=()):
         p = str(Path(path).absolute())  # os-agnostic absolute path
